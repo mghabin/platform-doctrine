@@ -26,7 +26,7 @@
 
 2. **Azure**
    - Create tenant (if not already).
-   - Apply CAF Landing Zones reference at the management-group level. Microsoft ships a Bicep template; deploy as-is.
+   - Apply CAF Landing Zones via the **Bicep AVM accelerator** ([aka.ms/alz/acc/bicep](https://aka.ms/alz/acc/bicep)). The older `Azure/ALZ-Bicep` "Classic" repo was removed from the official Accelerator on **2026-02-16** and will be archived in **2027-02-16** — don't start there.
    - Management group hierarchy:
      - `Platform` (shared services: DNS, identity, observability, container registry, key vaults)
      - `Workloads`
@@ -64,7 +64,7 @@ Contains:
   - `modules/container-apps-environment.bicep`
   - `modules/container-app.bicep` — scale-to-zero defaults, probes, MI
   - `modules/container-app-job.bicep` — cron + event-driven
-  - `modules/postgres-flexible.bicep` — Burstable B1ms + auto-pause
+  - `modules/postgres-flexible.bicep` — Burstable B1ms for dev/ci; ACA Job (cron) calls `az postgres flexible-server stop` nightly + start-on-demand from CI
   - `modules/service-bus.bicep` — Standard tier, RBAC
   - `modules/budget.bicep` — per-RG budget with Forecasted+Actual alerts
   - `modules/cloudflare-zone.bicep` (or Terraform — Cloudflare provider isn't first-class in Bicep)
@@ -105,7 +105,7 @@ Contains:
    - `/health/ready` returns 200 through Cloudflare.
    - App Insights shows the request.
    - Postgres connects via MI (no secrets in code).
-   - When idle 10 minutes, ACA scales to 0 + Postgres auto-pauses → bill drops.
+   - When idle 10 minutes, ACA scales to 0. Postgres stays warm until the nightly stop-job runs (manual stop/start; storage still bills).
 
 **Cost:** `$5–20`/mo when truly idle; `$70–120`/mo with min=1 and real traffic. **Effort:** ~1 weekend.
 
