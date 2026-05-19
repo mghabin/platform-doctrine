@@ -10,7 +10,7 @@ Picking the right thing is half the value of a doctrine document. **Articulating
 
 **Why it lost (against this operator).**
 
-- **DX gap.** CDK fights you. CloudFormation is dated. IAM is genuinely the worst part of using AWS. For a solo-to-org builder shipping features, the DX cost over a year is real productivity loss.
+- **DX gap (narrowing but real).** CDK can fight you. CloudFormation is dated. IAM is still the hardest IAM in the big three. But AWS has shipped real DX improvements: App Runner, Copilot CLI, Application Composer, Q Developer, Control Tower, Service Catalog. The right framing isn't "AWS DX is awful" — it's "AWS DX is the worst of the big three *and* has the deepest ecosystem of reference architectures and 3rd-party tooling to compensate".
 - **Telemetry.** CloudWatch is "ok". CloudWatch Logs Insights is weaker than KQL. Most AWS shops end up overlaying Datadog or Grafana, adding a third bill.
 - **Pricing surprises.** NAT Gateway, inter-AZ traffic, KMS calls, CloudFront egress — the famous surprises are well-documented but still surface monthly. Cloudflare R2 mitigates egress but doesn't eliminate the surface area.
 - **Existing skills factor.** This operator has 100+ hours on Azure. Switching costs 3-6 months of productivity. **Azure-that-you-know is operationally more stable than AWS-that-you're-learning** for the first 6-12 months — your own misconfigurations cause more downtime than Azure's outages.
@@ -23,11 +23,11 @@ Picking the right thing is half the value of a doctrine document. **Articulating
 
 ## Cloudflare + GCP
 
-**The case for it.** Cloud Run is the best container PaaS in any cloud — per-request billing, scale-to-zero aggressiveness, gVisor cold-start, simple DX. GCP's IAM is the simplest of the big three. Cloud SQL Postgres is solid. Vertex AI is competitive with Bedrock.
+**The case for it.** Cloud Run is the best container PaaS in any cloud for many workloads — per-request billing, scale-to-zero aggressiveness, fast cold-starts on the Gen 1 (gVisor) execution environment, simple DX. (Note: Gen 2 microVMs are preferred for CPU/network-heavy work and have *longer* cold starts; Cloud Run Jobs use Gen 2 exclusively.) GCP's IAM is the simplest of the big three. Cloud SQL Postgres is solid. Vertex AI is competitive with Bedrock.
 
 **Why it lost.**
 
-- **Product deprecation risk.** Cloud IoT Core killed in 2023. App Engine Standard deprecation cycles. Hangouts → Meet → Chat. Datastore → Firestore migrations. Google's institutional pattern is the wrong bet for a 10-year foundation. [killedbygoogle.com](https://killedbygoogle.com/) is depressing reading.
+- **Product deprecation risk (real but often overstated).** Cloud IoT Core was retired August 16, 2023 — the canonical GCP-enterprise example. App Engine Standard has had runtime-deprecation cycles. The famous [killedbygoogle.com](https://killedbygoogle.com/) list is **mostly consumer products** (Hangouts, Reader, etc.) — GCP enterprise core (Compute Engine, Cloud SQL, Cloud Run, BigQuery, GKE) has been stable. The honest read: GCP's deprecation track record at the *enterprise* level is closer to AWS/Azure than the consumer-skewed retired-products list implies. But the IoT Core retirement *is* a real signal worth weighing.
 - **Smaller talent pool.** Hiring engineers fluent in GCP is genuinely harder than AWS/Azure in most markets.
 - **Smaller account-management team per customer.** Support quality degrades faster than the big two.
 - **No identity bonus.** With identity in code, the bundle effect (Workspaces / Workforce Identity) doesn't help.
@@ -45,7 +45,7 @@ Picking the right thing is half the value of a doctrine document. **Articulating
 **Why it lost.**
 
 - **D1 is SQLite-class.** Fine for low-write workloads, insufficient as the primary RDBMS for a multi-product org. You can't run a real ERP / accounting system / order-management on D1.
-- **Workers ceilings.** 30s wall-clock, 128 MB memory (1 GB on paid). Real backends with image processing, PDF generation, large data joins, or ML inference don't fit.
+- **Workers ceilings.** **128 MB memory (same on free *and* paid — no memory upgrade tier)**, 30s CPU time default on paid (5 min max), no hard wall-clock limit on HTTP-triggered Workers. The real ceilings are *memory* (image processing, PDFs, large in-memory joins, ML inference don't fit in 128 MB) and *CPU* (heavy computation hits the 5-min cap). Cron Triggers cap at 15 min CPU. I/O-bound work can run far longer wall-clock.
 - **No long-running processes.** Background jobs that need >30 minutes are a non-starter.
 - **Cron via Cron Triggers is fine but limited.** No retry semantics, no DLQ for the trigger itself.
 
@@ -78,7 +78,7 @@ Picking the right thing is half the value of a doctrine document. **Articulating
 **Why it lost.**
 
 - **Ops tax.** Patch management, networking, HA, load balancing, observability — every layer you'd get for free from a hyperscaler is yours to operate. For a solo-to-org builder, that's the wrong allocation of finite attention.
-- **Single-DC blast radius.** The 2021 OVH Strasbourg fire took out half of OVH globally. Hetzner has similar single-DC concentration risk. Mitigation requires multi-DC architecture that you build yourself.
+- **Single-DC blast radius.** The March 2021 OVH Strasbourg fire destroyed **SBG2 entirely (~30k of OVH's ~300k global servers ≈ 10%)** with no data recovery, plus disruption across the other 3 Strasbourg DCs. One incident, no migration tooling, total loss for affected customers. Hetzner has similar single-DC concentration risk. Mitigation requires multi-DC architecture that you build yourself.
 - **No managed services.** Postgres? You're running it. Redis? You're running it. Kubernetes? You're running it.
 - **Networking is hard.** Cross-region private networking, DDoS protection, WAF — all need bolt-on solutions.
 
@@ -94,7 +94,7 @@ Picking the right thing is half the value of a doctrine document. **Articulating
 
 **Why it lost.**
 
-- **Hostile pricing past hobby.** Bandwidth overages turn into surprise bills at scale ($40/100GB on Vercel Pro is brutal). The "free until you're successful, then expensive" model.
+- **Pricing scales unpleasantly.** Pro now includes 1 TB/mo of Fast Data Transfer then $0.15/GB overage (not the old $0.40/GB), but per-seat pricing ($20/user/mo) + ISR/Function charges + build minutes still compound. The "free until you're successful, then expensive" model.
 - **Lock-in.** Vercel-specific build-time features and ISR semantics. Migrating Off Vercel is real work.
 - **Focused too narrowly.** Vercel is Next-first; Netlify is Jamstack-first. Neither is a backend platform.
 

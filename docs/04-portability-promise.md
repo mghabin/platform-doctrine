@@ -18,7 +18,7 @@ For each component, answer:
 | Component | Vendor lock-in? | If you had to leave, what's the cost? |
 |---|---|---|
 | **OCI container images** | None | Run on AWS Fargate / GCP Cloud Run / Fly.io / k8s anywhere. **No code change.** |
-| **Postgres on Azure Flexible Server** | None | `pg_dump` + restore to any cloud's managed Postgres or self-hosted. **No code change.** |
+| **Postgres on Azure Flexible Server** | None on the wire | App code change: none (vanilla Postgres). **But**: networking (private endpoints), MI auth, connection pooling, extensions, firewall rules, read-replica topology, backup retention, runbooks, monitoring/alerts all need re-creation on the target cloud. Realistic effort: **1-2 weeks per database** including rehearsal cutover, not "no code change". |
 | **Cloudflare R2 (S3 API)** | Light | Already S3-API; swap backup target to S3 or GCS or MinIO. **Endpoint config change.** |
 | **OpenTelemetry SDKs** | None | Re-point `OTEL_EXPORTER_OTLP_ENDPOINT` env var at Grafana Cloud / Datadog / Honeycomb / New Relic. **Config only.** |
 | **Bicep IaC** | Azure-only | ~2 week rewrite to OpenTofu. Modules are <300 lines each. The patterns transfer directly. |
@@ -27,7 +27,7 @@ For each component, answer:
 | **Service Bus for queues** | Medium | Message contract is yours; producer/consumer code is library-thin. Swap to SQS / Pub/Sub / RabbitMQ in **~1 week**. |
 | **App Insights / Log Analytics / KQL** | Medium (queries are KQL-specific) | Telemetry collection (OTel) is portable; **dashboards and KQL queries need rewrite** to Datadog/Grafana. ~2 weeks of dashboard/alert porting. |
 | **Azure Container Apps configuration** | Medium | YAML/Bicep is Azure-shaped but maps cleanly to Cloud Run / Fargate task definitions. **~1 week to port.** |
-| **Managed Identity / Federated Credentials** | Medium | Code uses `DefaultAzureCredential` → swap to `WorkloadIdentityFederation` SDK on AWS/GCP. **~3-5 days for app code; longer for CI/CD wiring.** |
+| **Managed Identity / Federated Credentials** | Medium | Code uses `DefaultAzureCredential`. Swap is *not* trivial once it's embedded in local dev, integration tests, CI, IaC, KV access patterns, and service-to-service auth. Realistic effort: **2-4 weeks** for a small org including CI/CD re-wiring and full prod cutover. |
 | **Azure OpenAI** | Light | Same OpenAI API shape; swap endpoint + key to OpenAI direct / Anthropic / Bedrock. **Hours, not days.** |
 | **Cloudflare** ⚠️ | High — and intentional | The edge layer is not portable. **You would never want to leave it.** Cloudflare's positioning is "sit in front of any backend" — they never compete for the backend itself, so the lock-in is the price for the best edge in the industry. |
 
@@ -41,7 +41,7 @@ The recommended stack **deliberately avoids** the Azure primitives with high loc
 | **Logic Apps / Power Automate** | Proprietary DSL; not portable. Write workflow code in your app instead. |
 | **Azure Functions (Consumption tier) with Functions-specific bindings** | Runtime lock-in; trigger semantics not portable. Use ACA Jobs (containers, your code). |
 | **Front Door (with custom rules)** | Locks you into Azure's edge; replicating rules elsewhere is real work. Cloudflare instead. |
-| **Service Fabric** | Effectively dead; migration target unclear. Never start here. |
+| **Service Fabric** | Customer offering in maintenance mode (Microsoft recommends ACA/AKS for new projects). Not deprecated; still runs Azure first-party control planes. Don't start new greenfield workloads here. |
 | **API Management (with custom policy XML)** | Proprietary policy language. Use a code-based API gateway instead. |
 
 ## Migration cost summary
@@ -59,10 +59,11 @@ A full migration from this stack to any other major cloud:
 | App code changes (`DefaultAzureCredential` → equivalent) | ~3-5 days |
 | Observability dashboards + alerts re-port | ~2 weeks |
 | Network + DNS cutover | ~1 day (Cloudflare LB makes this trivial) |
-| **Total for a small org** | **~4-6 weeks** |
-| **Total for a multi-product org with 5+ services** | **~2-3 months** |
+| **Toy / single service** | **~2-6 weeks** |
+| **Small real org with prod customers** | **~3-6 months** (discovery + IAM + networking + CI/CD + observability + data rehearsals + cutover + rollback + team learning) |
+| **Multi-product org with 5+ services + multi-region** | **~6-18 months** |
 
-This is dramatically lower than the typical "we're locked in for years" cloud migration. The reason: every primary choice was made on portable primitives (containers, Postgres, S3-API, OTel) rather than proprietary services.
+**This isn't "weeks not years" — be honest with yourself.** Real cloud migrations are dominated by IAM/networking/observability/runbook re-creation, not by the code. The portable primitives in this stack reduce the *code* portion of the migration to weeks; the *platform* portion is still months. The point of this discipline isn't magic-fast migration — it's that you're *not locked out* and the cost-of-leaving stays bounded.
 
 ## The Cloudflare lock-in caveat
 
@@ -70,7 +71,7 @@ Cloudflare is the **one intentional lock-in** in the stack. The reasoning:
 
 - The portability test is **"could you move if you needed to?"** — and for Cloudflare, the answer is yes (you can put any CDN in front of any origin), but you'd give up genuine quality + cost advantages.
 - Cloudflare's commercial model is to *sit in front of any backend*, not to compete with backends. So they never have an incentive to weaponize the lock-in by deprecating backend access.
-- Cloudflare's product expansion pattern is additive — they ship new primitives (Workers AI, Hyperdrive, Pages) without breaking old ones. This is the opposite of GCP's pattern.
+- Cloudflare's deprecation rate is dramatically lower than GCP's and is mostly absorbed by a clean migration story (Workers Sites → Workers Static Assets; Pages is being unified into Workers + Static Assets) rather than abrupt kills. The core primitives (Workers, R2, KV, D1, Queues) have backward-compatible track records.
 - R2's zero-egress fee is the single biggest cost moat in the architecture. The alternative (any other CDN + paying for egress from the backend) is materially more expensive.
 
 This is the kind of lock-in that's **economically rational to embrace** — when leaving costs you more than staying does. As long as that remains true, the lock-in is benign.

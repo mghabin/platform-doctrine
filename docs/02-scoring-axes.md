@@ -21,7 +21,7 @@ Different operators arrive at different "right" answers from the same axes. A fr
 | 9 | **DX** | Time from "I want to deploy X" to "X is running in prod" | Determines team productivity |
 | 10 | **Pricing predictability** | Surprise-cost surface area, transparency, cost-control tooling | Determines whether finance fires you |
 | 11 | **Talent pool** | Number of engineers fluent in the platform | Determines hiring cost |
-| 12 | **Existing skills (operator-specific)** | Hours of muscle memory you already have on the platform | Determines productivity in the first 6-12 months |
+| 12 | **Existing skills (operator-specific)** | Hours of muscle memory the *current operator* already has on the platform | Determines productivity in the first 6-12 months. **Decays sharply** as the team hires — new engineers bring market skill distributions, not the founder's skill bias. Weight this axis high for solo-to-3-person stage; weight near zero past 10 engineers. |
 
 ## The 2026 scoring (this guide's bias)
 
@@ -33,9 +33,9 @@ Scoring is a judgement, not a measurement. These reflect this author's read of t
 | 2 — Operational maturity | A+ | A | A- | A |
 | 3 — Service deprecation rate | A | A | C+ (Cloud IoT Core killed 2023, App Engine pivots) | A+ (only expands) |
 | 4 — Tooling | B+ | **A** (Bicep, az CLI, VS Code) | A- | A |
-| 5 — Telemetry / observability | B+ | **A+** (App Insights + KQL is best in any cloud) | A- | A- (Workers Observability) |
+| 5 — Telemetry / observability (cloud-native; not counting 3rd-party overlays like Datadog/Honeycomb/Grafana Cloud) | B+ (CloudWatch + X-Ray) | **A** (App Insights + LAW + KQL — strongest cloud-native bundle; OTel + .NET tracing "just works"; Datadog-on-Azure still better at correlated dashboards) | A- (Cloud Trace/Logging + Vertex AI anomaly detection) | A- (Workers Observability) |
 | 6 — Monitoring + alerts | B (dated UX) | **A** (Action Groups) | A- | A |
-| 7 — AI scaling | A (Bedrock catalog) | **A+** (first access to new GPT models) | A (Vertex AI, Gemini) | A (Workers AI, edge-only) |
+| 7 — AI scaling | A (Bedrock: Claude/Llama/Mistral/Nova) | **A** (Azure OpenAI: VNet/Private Link/CMK/PTU + Entra RBAC; model availability now roughly simultaneous with the direct OpenAI API — the historic "first access" gap closed in 2025/2026) | A (Vertex AI, Gemini) | A (Workers AI, edge-only) |
 | 8 — Control / depth | A+ | A | A | B (constrained by edge model) |
 | 9 — DX | C+ | B+ | A | A+ |
 | 10 — Pricing predictability | C+ (NAT, inter-AZ) | B | B+ | A (per-request) |
