@@ -134,6 +134,6 @@ That's it. The procedures don't need to be exotic — they need to exist and be 
 - Postgres Flex backup + PITR — [learn.microsoft.com/azure/postgresql/flexible-server/concepts-backup-restore](https://learn.microsoft.com/azure/postgresql/flexible-server/concepts-backup-restore)
 - Postgres Flex read replicas + promotion — [learn.microsoft.com/azure/postgresql/flexible-server/concepts-read-replicas](https://learn.microsoft.com/azure/postgresql/flexible-server/concepts-read-replicas)
 - Key Vault soft-delete + purge protection — [learn.microsoft.com/azure/key-vault/general/soft-delete-overview](https://learn.microsoft.com/azure/key-vault/general/soft-delete-overview)
-- R2 bucket versioning — [developers.cloudflare.com/r2/buckets/object-versioning/](https://developers.cloudflare.com/r2/buckets/object-versioning/)
+- R2 bucket versioning — [developers.cloudflare.com/r2/buckets/](https://developers.cloudflare.com/r2/buckets/)
 - Cloudflare Load Balancing failover — [developers.cloudflare.com/load-balancing/](https://developers.cloudflare.com/load-balancing/)
 - Google SRE Workbook — Disaster Recovery — [sre.google/workbook/](https://sre.google/workbook/)

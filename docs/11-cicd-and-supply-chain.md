@@ -149,7 +149,7 @@ This collapses 30+ Dependabot PRs per week into ~6 grouped ones.
 ## Sources
 
 - SLSA framework — [slsa.dev](https://slsa.dev/)
-- cosign keyless signing — [docs.sigstore.dev/cosign/signing/overview/](https://docs.sigstore.dev/cosign/signing/overview/)
+- cosign keyless signing — [github.com/sigstore/cosign](https://github.com/sigstore/cosign)
 - GitHub Actions OIDC to Azure — [docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure](https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-azure)
 - pinact — [github.com/suzuki-shunsuke/pinact](https://github.com/suzuki-shunsuke/pinact)
 - actions-runner-controller — [github.com/actions/actions-runner-controller](https://github.com/actions/actions-runner-controller)
