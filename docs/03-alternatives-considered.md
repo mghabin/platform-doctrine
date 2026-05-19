@@ -139,12 +139,78 @@ Picking the right thing is half the value of a doctrine document. **Articulating
 **Why it lost.**
 
 - **Premature complexity.** A solo builder running Kubernetes is paying a tax for problems they don't have yet.
-- **Higher idle cost.** Control-plane fees + nodes you can't fully scale to zero.
+- **Operational tax** (cluster upgrades, node-pool sizing, networking, CSI drivers) — real even before any app code. (Note: **AKS Free** tier has $0 control plane; only AKS Standard ($73/mo for the SLA) or EKS ($73/mo mandatory) has a control-plane fee. The objection is operational, not billing.)
 - **Steeper learning curve** than ACA / Cloud Run / Fargate.
 
-**When Kubernetes is the right answer.** When ACA / Cloud Run / Fargate hits a real ceiling (rare). When you have a dedicated platform team. When you're running 50+ services that justify the operational investment.
+**When Kubernetes is the right answer.** When ACA / Cloud Run / Fargate hits a real ceiling — typically: required sidecars beyond the platform's built-in, custom CRDs, multi-namespace tenancy, advanced networking the platform doesn't expose, GPU scheduling, KEDA scaler limits. When you have a dedicated platform team. When you're running 50+ services that justify the operational investment.
 
-**The recommended progression.** Start on ACA. Move to AKS only when ACA cannot handle a specific workload — which most orgs never hit.
+**The recommended progression.** Start on ACA. Move to AKS only when ACA cannot handle a specific workload — which most orgs never hit. When that day comes, [`mghabin/dotnet-engineering-guide` ch06 "Cloud-Native .NET on Kubernetes"](https://github.com/mghabin/dotnet-engineering-guide/blob/main/docs/06-cloud-native.md) is the implementation guide.
+
+---
+
+## GitLab (CI + DevOps platform)
+
+**The case for it.** Single product covers repos, issues, merge requests, CI, secrets, environments, package & container registry, deploy approvals, security scanning, and compliance evidence. Stronger operational integration than GitHub Actions + a dozen marketplace dependencies. Self-hostable. Mature audit + RBAC story for regulated industries.
+
+**Why it lost as the *default* (for this stack).**
+
+- **Most code collaboration today happens on GitHub.** Switching platforms is a real friction tax for new hires and open-source contribution flow.
+- **GHA's OIDC story is mature** for federating into Azure / AWS / GCP without long-lived secrets — same depth as GitLab.
+- **The Cloudflare + Azure stack already pulls in GitHub** for `pinact` / SLSA / cosign / Dependabot which all light up Day 1 on GitHub.
+
+**When GitLab beats GHA *for this stack*.**
+
+- **You're already on GitLab** (common in EU / regulated industries) — don't switch back.
+- **You need integrated audit-evidence collection** for SOC2/ISO/PCI and want everything in one product's audit log. GHA + GitHub Advanced Security (~$49/user/mo) is more expensive once your team exceeds ~10 engineers.
+- **You want self-hostable CI control-plane** as a hard requirement (GHA's reusable workflows + self-hosted runners aren't equivalent to a self-hosted GitLab).
+- **Org > 50 engineers** and the platform-integration argument outweighs marketplace breadth.
+
+**The honest framing**: GHA is the *default* in this doctrine because it's where most teams already are. GitLab is not anti-pattern; it's a deliberate alternative for shops with the operational-integration constraint.
+
+---
+
+## Entra External ID for customer identity
+
+**The case for it.** The stack already commits to Azure. Entra **External ID** (the modern B2C, GA 2024) is free for the first 50k MAU, uses the same Conditional Access engine + audit log + PIM as workforce Entra, supports OIDC + SAML + social IdPs + MFA + custom branding, and carries Microsoft's compliance footprint (SOC2 / ISO 27001 / HIPAA / FedRAMP-eligible).
+
+**Why this doctrine still defers customer auth to code (Auth0 / Keycloak / FusionAuth).**
+
+- **Blast-radius separation.** Multiple 2024 Entra-cascade incidents took down customer-auth on apps that incorrectly depended on Entra (Storage SAS, App Service auth). Putting customer auth on Entra means workforce-Entra incidents degrade the customer experience.
+- **Portability.** OIDC libraries talk to any compliant IdP. Switching Auth0 → Keycloak → FusionAuth is config + library swap. Switching off Entra External ID means re-doing user accounts, federation, consented apps.
+- **Sovereignty / sanctions decoupling.** A customer base spanning sanctions geographies needs an IdP independent from the cloud-provider's compliance obligations.
+
+**The honest trade-off table.**
+
+| Option | Up-front | Ongoing | Ops burden | Portability | Recommended when |
+|---|---|---|---|---|---|
+| **Entra External ID** | Low | Free ≤50k MAU; ~$0.0055/MAU after | Lowest | Low | No sovereignty concern + you'll always be on Azure |
+| **Auth0** (Okta-owned) | Low | Free ≤7.5k MAU; $258/mo+ Professional + per-user | Low | High | Hybrid/multi-cloud; cost-tolerant; want fastest prototype |
+| **Keycloak** (self-hosted) | High | ~$50-150/mo compute only | High (you run upgrades + HA) | Highest (OSS) | EU sovereignty / regulated / cost-sensitive at scale; have ops capacity |
+| **FusionAuth** | Medium | Free self-hosted; $125/mo+ hosted | Medium | High | Want self-hosted DX without Keycloak's depth |
+
+**The doctrine's default**: **Auth0 for the prototype** (fastest, OIDC-standard, cheapest portability cost). **Migrate to Keycloak or FusionAuth** when MAU growth makes Auth0 unattractive (typically 10-25k MAU). **Do not pick Entra External ID** even though Azure is the backend — the blast-radius separation argument wins.
+
+> An Azure-native shop with no sovereignty concerns + one-throat-to-choke preference could legitimately disagree and pick Entra External ID. Record the choice in your ADR.
+
+---
+
+## Pulumi (IaC alternative)
+
+**The case for it.** Strongly-typed code in TypeScript / Python / Go / .NET (instead of HCL). Real abstractions, package management, language-native testing, IDE refactoring. Pulumi Cloud handles state with stronger team-collaboration UX than Terraform/OpenTofu state backends.
+
+**Why this doctrine still defers to Bicep (Azure-only) / OpenTofu (multi-cloud).**
+
+- **Bicep is type-safe native IaC for Azure** — `az bicep build` + VS Code IntelliSense + Azure Verified Modules give type safety without a Pulumi runtime.
+- **OpenTofu is the Linux Foundation / OSS-forever Terraform fork** — recognizable HCL, broad provider support, mature lifecycle.
+- **Pulumi adds a runtime** (the language host) — one more layer to debug when a deploy fails.
+
+**When Pulumi wins for this stack.**
+
+- Team has strong .NET / TS / Python culture and resents HCL.
+- You need real abstractions across providers (e.g. "deploy to Azure OR AWS depending on env" — Pulumi composes this cleaner than `count`/`for_each`).
+- You accept Pulumi Cloud as state vendor (or run `pulumi login --local`).
+
+**The doctrine's default**: Bicep for Azure single-cloud, OpenTofu when multi-cloud, Pulumi only if the team has a strong language-native preference and accepts the extra runtime layer.
 
 ---
 
@@ -161,3 +227,6 @@ Picking the right thing is half the value of a doctrine document. **Articulating
 | **Heroku/Render/Railway** | Per-app pricing doesn't scale + vendor risk |
 | **Multi-cloud active-active from day one** | Premature; multiplies complexity by N |
 | **Kubernetes from day one** | Premature complexity; start on managed PaaS |
+| **GitLab as CI platform** | Not anti-pattern; deliberate alternative for shops with operational-integration / self-hosted-control-plane / org-size-50+ constraint |
+| **Entra External ID for customer auth** | Blast-radius separation from Entra-cascade incidents + portability + sovereignty decoupling argument wins, but legitimate for one-throat-to-choke Azure-native shops |
+| **Pulumi (IaC)** | Bicep + OpenTofu are the lower-cognitive-load default; Pulumi wins when team has strong language-native culture |

@@ -12,17 +12,30 @@
 
 **Cost:** `$0`. **Effort:** done.
 
-## Phase 1 — Foundation (1 weekend)
+## Phase 1 — Foundation
 
 **Goal:** stand up the always-on layer. Nothing app-specific yet.
 
-### Steps
+**Honest effort estimates** (replace v1.1's "1 weekend" claim — see [`v1.2 audit findings`](../CHANGELOG.md)):
+
+| Operator profile | Realistic time | What gets cut on the short variant |
+|---|---|---|
+| Prototype "I want a sandbox by Monday" | ~1 weekend (16h focused) | DNSSEC, secondary DNS, hardware 2FA, Policy enforcement, audit-log streaming, AOP on origin — defer to Phase 1.5 |
+| Solo founder, has done it before, going to ship customer code | ~40-80h focused | Production-grade landing zone but still solo-ops; no SOC2 evidence yet |
+| Org-grade landing zone (multi-team, multi-product, audit-evidence) | **2-4 calendar weeks** | Nothing — this is the full set |
+
+If you take the short variant, write down what you deferred + a date to come back to it. Otherwise it never happens.
+
+### Steps (full set)
 
 1. **Cloudflare**
    - Create account.
    - Buy primary org domain via Cloudflare Registrar (at-cost).
    - Configure zone defaults: SSL=Full (strict), security level=medium, Always Use HTTPS=on, HSTS=on, Bot Fight Mode=on.
-   - Enable Cloudflare Zero Trust (free tier).
+   - **Enable DNSSEC** at the zone and verify the DS record is published at the registrar (auto-handled by Cloudflare Registrar).
+   - **Configure secondary DNS** to a backup provider (e.g. AWS Route 53 at ~$0.50/zone/month). AXFR-out from Cloudflare → secondary. Resolves the DNS-chokepoint concern from [`09-concentration-risk.md`](./09-concentration-risk.md).
+   - **Enforce hardware 2FA** on every team account; disable TOTP fallback.
+   - Enable Cloudflare Zero Trust (free tier, ≤50 users).
 
 2. **Azure**
    - Create tenant (if not already).
@@ -43,10 +56,12 @@
 
 4. **Cost guardrails**
    - Azure Cost Management budget alerts: `$10` / `$50` / `$100` / `$500` thresholds.
-   - Azure Policy at MG level: enforce tags (`costCenter`, `service`, `env`, `owner`) on every resource.
-   - Azure Policy: deny resources outside `eastus` / `westeurope` (or your chosen regions) — prevents accidental cross-region sprawl.
+   - **Burn-rate alerts** (1h / 6h / 24h windows) per `infra-engineering-guide` ch10 §4 — Azure Cost Management forecast alerts + a custom Logic App / GHA cron that fires when 24h spend exceeds 4× rolling-7-day baseline.
+   - **Kill-switch + TTL on non-prod** per `infra-engineering-guide` ch10 §4: PR-preview environments destroy after 24h; sandbox subscription gets nuked nightly via scheduled `az group delete`.
+   - Azure Policy at MG level: enforce tags `cost-center`, `service`, `env`, `owner`, `data-classification` on every resource (kebab-case per `infra-engineering-guide` ch10 §3; `data-classification` is required for GDPR/SOC2 — `Public` / `Internal` / `Confidential` / `Restricted`).
+   - Azure Policy: deny resources outside your approved regions — prevents accidental cross-region sprawl.
 
-**Cost:** `$0–10`/mo (domain registration is annual). **Effort:** ~1 weekend.
+**Cost:** `$0–10`/mo (domain registration is annual; Route 53 secondary DNS is ~$0.50/zone/mo).
 
 ## Phase 2 — Platform template repo (1-2 weekends)
 

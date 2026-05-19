@@ -4,6 +4,12 @@
 
 The recommendation in [`01-recommendation.md`](./01-recommendation.md) names GHA + OIDC as the CI/CD baseline. This chapter is the operational follow-through: when to add self-hosted runners, how to manage secrets at scale, how to ship signed artifacts with provenance, and how to handle the org-level concerns the small-team starter skips.
 
+> **Upstream doctrine** — this chapter *applies*, doesn't redefine:
+>
+> - CI/CD baseline + reusable workflows + OIDC depth — [`infra-engineering-guide/docs/03-ci-cd.md`](https://github.com/mghabin/infra-engineering-guide/blob/main/docs/03-ci-cd.md)
+> - Supply-chain controls (SLSA L3 for prod, SBOM, VEX, cosign) — [`infra-engineering-guide/docs/06-security-supply-chain.md`](https://github.com/mghabin/infra-engineering-guide/blob/main/docs/06-security-supply-chain.md) §3-§9
+> - Self-hosted runner trust model (`runner_environment=github-hosted` OIDC claim) — `infra-engineering-guide/docs/03-ci-cd.md` §4.2
+
 ## CI cost curve
 
 GHA-hosted runners are $0/month at idle, ~$0.008/min on Linux 2-core, scaling up to $0.064/min on 8-core. Sounds cheap until:
@@ -17,11 +23,33 @@ GHA-hosted runners are $0/month at idle, ~$0.008/min on Linux 2-core, scaling up
 
 The cost ladder in [`01-recommendation.md`](./01-recommendation.md) doesn't include this. **Build it into your Stage 3+ budget**.
 
-### When to switch to self-hosted runners
+### When to switch off GHA-hosted: compare the alternatives
 
-**Trigger**: monthly GHA-hosted-runner bill exceeds $200/month sustained.
+**Trigger**: monthly GHA-hosted-runner bill exceeds ~$200/month sustained. **Before defaulting to Hetzner self-hosted, compare:**
 
-**Recommended pattern**: Hetzner CCX (dedicated CPU) bare-metal-ish VMs running `actions/actions-runner` in Docker, with [actions-runner-controller](https://github.com/actions/actions-runner-controller) on Kubernetes or [philips-labs/terraform-aws-github-runner](https://github.com/philips-labs/terraform-aws-github-runner) for ephemeral runners. Cost: ~$30-60/month per always-on runner equivalent to a hosted 2-core minute pool. **10-100x cheaper than hosted** at scale.
+| Option | Cost (vs hosted baseline) | Ops burden | OIDC trust model | Best for |
+|---|---|---|---|---|
+| **GHA Larger Runners** (4x / 8x / 16x core, beta-GA 2025) | 1.2-1.8× per-min but eliminate runner ops; usable from any repo without infra | Zero (managed) | Same as standard hosted — preserves `runner_environment=github-hosted` OIDC claim | Modest CI inflation (compute-bound builds), small/medium org, no platform-team |
+| **Azure-hosted ephemeral runners** (ACA Jobs running `actions/runner` ephemeral) | ~30-50% cheaper than hosted at sustained load; uses ACA scale-to-zero | Low (you own the image; ACA manages lifecycle) | Self-hosted — does NOT satisfy `runner_environment=github-hosted` claim | Same-cloud locality (faster ACR pulls); want runners to live alongside the rest of Azure |
+| **AWS CodeBuild + GHA bridge** | Pay-per-second AWS Compute; competitive at scale | Medium | Self-hosted | Already on AWS-heavy stack |
+| **Hetzner CCX self-hosted (this doctrine's pick for large scale)** | **10-100× cheaper** than hosted at >250k min/mo | High (you own patching + isolation + autoscaling) | Self-hosted — **does NOT satisfy `runner_environment=github-hosted`** claim; trust-model implications below | Massive CI workloads (>250k min/mo); have dedicated platform engineer |
+
+**Honest re-evaluation order**: GHA Larger Runners first → Azure-hosted ephemeral → AWS CodeBuild → Hetzner only if the cost gap is materially > $1k/mo *after* trying GHA Larger Runners. Hetzner introduces a 4th vendor (Cloudflare + Azure + GitHub + Hetzner) — the cost win has to be real.
+
+### Self-hosted runner trust-model implications (mandatory disclosure)
+
+The infra-engineering-guide ch03 §4.2 mandates that production deploy workflows MUST require the OIDC claim `runner_environment=github-hosted` to defeat self-hosted-runner abuse (an attacker on a self-hosted runner can otherwise inject their own OIDC claims). If you go self-hosted (Hetzner, Azure-hosted, AWS), you MUST:
+
+1. **Segregate workflows by runner type**: prod-deploy workflows continue to use GHA-hosted runners (preserve the claim); CI/build workflows can use self-hosted.
+2. **Add mitigating controls**: every self-hosted runner uses ephemeral mode (`actions/actions-runner` `--ephemeral`), runs in isolated VMs (one job per VM), has read-only access to repos, never holds long-lived secrets.
+3. **Network-isolate** self-hosted runners from your Azure prod network (NAT egress only; no inbound; no Private Endpoint access).
+4. **Document the trust boundary** in your ADR.
+
+If you can't satisfy these, **don't go self-hosted**. The cost savings aren't worth a Solarwinds-class supply-chain attack vector.
+
+### Recommended self-hosted pattern (if you choose it)
+
+Hetzner CCX (dedicated CPU) bare-metal-ish VMs running `actions/actions-runner` in `--ephemeral` mode in Docker, with [actions-runner-controller](https://github.com/actions/actions-runner-controller) on a small Kubernetes cluster (yes — Kubernetes for *CI* even though the prod recommendation is ACA; the deliberate exception is documented in [`06-anti-patterns.md`](./06-anti-patterns.md) § Silent decisions). Alternative: [philips-labs/terraform-aws-github-runner](https://github.com/philips-labs/terraform-aws-github-runner) for ephemeral AWS-hosted runners. Cost: ~$30-60/month per equivalent-2-core always-on runner.
 
 **Trade-off**: you now own runner patching, autoscaling, container isolation, ephemeral-runner lifecycle. Worth it past $200/mo; not worth it below.
 
@@ -71,22 +99,25 @@ The dotnet-engineering-guide and infra-engineering-guide already cover most of t
 
 The `mghabin/cloudflare-azure-platform` template (Phase 2) ships a reusable workflow that every product inherits. It enforces:
 
-| Control | Tool |
-|---|---|
-| Action pinning to commit SHA | [pinact](https://github.com/suzuki-shunsuke/pinact) CI check |
-| Container vuln scan | Trivy with `severity: HIGH,CRITICAL` fail-on |
-| SBOM generation | Syft → upload as build artifact |
-| Container signing | cosign keyless (Fulcio) + Rekor transparency log |
-| SLSA provenance | `actions/attest-build-provenance` |
-| Secret scanning | gitleaks pre-commit + CI |
-| Dependency review | `actions/dependency-review-action` on PRs |
-| CodeQL | Multi-language analysis |
-| OSSF Scorecard | Weekly scheduled run |
-| License compliance | `licensecheck` per language ecosystem |
-| Markdown/lint | markdownlint-cli2 |
-| Link check | lychee |
+| Control | Tool | SLSA level |
+|---|---|---|
+| Action pinning to commit SHA | [pinact](https://github.com/suzuki-shunsuke/pinact) CI check | — |
+| Container vuln scan | Trivy with `severity: HIGH,CRITICAL` fail-on | — |
+| SBOM generation | Syft → upload as build artifact + attach via cosign | — |
+| VEX statements (Vulnerability Exploitability eXchange) | OpenVEX via `openvex/vexctl` — generate per-image, attach to the SBOM | Required by `infra-engineering-guide` ch06 §7 |
+| Container signing | cosign keyless (Fulcio) + Rekor transparency log | — |
+| SLSA provenance (build) | **For new platforms aiming at SLSA Build L3 (infra-guide ch06 §9 "must" for prod)**: use [`slsa-framework/slsa-github-generator`](https://github.com/slsa-framework/slsa-github-generator) — runs builds in an isolated GHA reusable workflow that produces L3-compliant provenance. **For platforms that accept L2** (faster setup, hosted-builder lineage acceptable): `actions/attest-build-provenance`. **Document the choice in your ADR; default to L3 for production artifacts**. | L2 (`attest-build-provenance`) vs L3 (`slsa-github-generator`) |
+| Secret scanning | gitleaks pre-commit + CI | — |
+| Dependency review | `actions/dependency-review-action` on PRs | — |
+| CodeQL | Multi-language analysis | — |
+| OSSF Scorecard | Weekly scheduled run | — |
+| License compliance | `licensecheck` per language ecosystem | — |
+| Markdown/lint | markdownlint-cli2 | — |
+| Link check | lychee | — |
 
 All actions pinned to commit SHA. `pinact` enforces this — the platform template's `pinact.yml` workflow fails any PR that introduces a tag-pinned action.
+
+> **`actions/attest-build-provenance` status note (2026)**: GitHub's `attest-build-provenance` reusable action is being superseded by the SLSA framework's native generator + `actions/attest-build-provenance` migration helpers; new platforms should plan to migrate. The L3 path via `slsa-github-generator` is the longer-lived choice.
 
 ### Verify-at-deploy, not just verify-at-build
 
