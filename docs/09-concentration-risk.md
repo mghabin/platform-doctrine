@@ -21,7 +21,7 @@ Cloudflare has had outages — most recently a multi-hour July 2024 control-plan
 DNS is the chokepoint. If Cloudflare's DNS is down, your domains stop resolving — even if your origin is fine. **Secondary DNS** publishes the same zone to a second nameserver provider (e.g. AWS Route 53). Resolvers query whichever is up.
 
 Cloudflare offers two modes:
-- **Secondary DNS Setup** (Cloudflare as the primary, AXFR out to a secondary) — free on all plans.
+- **Secondary DNS Setup** (Cloudflare as the primary, AXFR-out to a secondary like Route 53) — available; verify with the Cloudflare account team that AXFR-out is enabled on your zone before relying on it (it is not always enabled by default on Free/Pro and may require an explicit ticket).
 - **Multi-provider DNS** (you publish to both providers from a single source of truth, e.g. via OctoDNS) — strongest pattern; requires more discipline.
 
 The simpler "primary at Cloudflare + AWS as secondary" pattern is enough for the recommended stack. Configure during Phase 1 of [`05-phase-plan.md`](./05-phase-plan.md).
@@ -49,12 +49,31 @@ Most "Cloudflare problems" aren't outages; they're account takeovers. Defenses:
 
 ## What to do during a Cloudflare incident
 
-### If only the CF edge is down (origin reachable)
+### Origin reachability: pick ONE posture and design for it (resolves v1.1 contradiction with `07`)
+
+The doctrine forces an explicit choice between two postures. **`07-origin-security-and-private-networking.md` recommends the security-first variant** for the prod default; the resilience-first variant is documented here for shops that explicitly trade origin reachability against degraded edge-only-failure mode.
+
+| Posture | Prod origin reachability | Cloudflare edge-outage recovery | Trade-off |
+|---|---|---|---|
+| **Security-first (recommended)** | Internal-only ACA env + Cloudflare Tunnels — **no public IP on the origin** | Secondary DNS to a backup resolver + (if CF Workers/R2 are also down) accept extended outage until Cloudflare returns; **no grey-cloud bypass possible** | Maximum origin protection; tighter blast radius on account compromise; no DDoS bypass on edge outage |
+| **Resilience-first** | Public ACA ingress restricted to Cloudflare IP ranges + AOP enforced | Same as above, *plus* emergency grey-cloud bypass: temporarily lift the AOP requirement, expose the ingress directly, accept that there's no WAF/CDN/DDoS until CF returns | Faster recovery on a pure edge outage at the cost of a wider always-on origin attack surface |
+
+> Pick one. Document the choice in your platform-template repo. Drill the chosen failover quarterly. **Do not** silently rely on grey-cloud bypass while operating an internal-only origin — those are incompatible.
+
+### If the CF edge is down — security-first variant (recommended)
 
 1. Check [cloudflarestatus.com](https://www.cloudflarestatus.com/) and Cloudflare's incident ticker.
-2. If using secondary DNS, queries automatically resolve via the backup nameserver.
-3. **Optional emergency bypass**: turn off the proxy for `api.yourdomain.com` (orange-cloud → grey-cloud) — direct-to-origin traffic, no CDN, no WAF, no DDoS protection. Use only if the alternative is full outage.
-4. Recover normally when CF is back. Re-enable proxy.
+2. If you've set up secondary DNS (Phase 1), queries resolve via the backup nameserver — but the backup nameserver still points at the **same Cloudflare-tunneled origin**, which won't serve traffic if Workers/Pages/Tunnel control plane is degraded.
+3. Surface a Cloudflare-incident-banner on a static "stale" copy of your marketing site (e.g. a Cloudflare Pages deployment of an emergency `503` page served from a separate CF account or from Bunny.net / Vercel as a backup edge — see `09-concentration-risk.md` § Cloudflare contingency).
+4. Recover normally when CF is back.
+
+### If the CF edge is down — resilience-first variant (if you chose it)
+
+1. Check status page.
+2. Temporarily remove the Cloudflare-IP-allowlist on the ACA ingress (`az containerapp ingress access-restriction remove …`) **and** disable AOP enforcement on the origin to allow direct browser-to-origin traffic.
+3. Update DNS to point directly at the ACA FQDN (grey-cloud / unproxied).
+4. Accept that you're operating without WAF/CDN/DDoS protection until CF returns.
+5. When CF is back: re-enable AOP + IP allowlist FIRST, then re-proxy DNS.
 
 ### If Cloudflare account is compromised
 

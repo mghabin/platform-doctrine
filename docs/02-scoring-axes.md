@@ -31,7 +31,7 @@ Scoring is a judgement, not a measurement. These reflect this author's read of t
 |---|---|---|---|---|
 | 1 — Stability | A+ | A | A- | A |
 | 2 — Operational maturity | A+ | A | A- | A |
-| 3 — Service deprecation rate | A | A | C+ (Cloud IoT Core killed 2023, App Engine pivots) | A+ (only expands) |
+| 3 — Service deprecation rate | A | A | C+ (Cloud IoT Core retired Aug 2023, App Engine runtime cycles) | A (dramatically lower rate than GCP — Workers Sites and Stream Live were retired, but most expansion is additive and core primitives have backward-compatible track records) |
 | 4 — Tooling | B+ | **A** (Bicep, az CLI, VS Code) | A- | A |
 | 5 — Telemetry / observability (cloud-native; not counting 3rd-party overlays like Datadog/Honeycomb/Grafana Cloud) | B+ (CloudWatch + X-Ray) | **A** (App Insights + LAW + KQL — strongest cloud-native bundle; OTel + .NET tracing "just works"; Datadog-on-Azure still better at correlated dashboards) | A- (Cloud Trace/Logging + Vertex AI anomaly detection) | A- (Workers Observability) |
 | 6 — Monitoring + alerts | B (dated UX) | **A** (Action Groups) | A- | A |

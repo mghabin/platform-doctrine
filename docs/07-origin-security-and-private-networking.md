@@ -21,7 +21,7 @@ The architecture in [`01-recommendation.md`](./01-recommendation.md) puts Cloudf
 
 ### Phase 2 (platform template) — bake these into every new service
 
-- **Cloudflare Authenticated Origin Pulls (AOP)** — origin only accepts requests carrying a Cloudflare client cert. Free on all Cloudflare plans. ACA can verify the cert at the ingress via custom `X-Forwarded-*` rules, or via a thin reverse-proxy container if you need stricter validation.
+- **Cloudflare Authenticated Origin Pulls (AOP)** — Cloudflare presents a client cert when fetching from origin; origin verifies it before serving. Free on all Cloudflare plans. **How ACA verifies the cert**: ACA ingress supports `clientCertificateMode: "require"` on the HTTP route (set via ARM/Bicep on the `Microsoft.App/containerApps/properties/configuration/ingress` resource). The application reads `X-Forwarded-Client-Cert` (forwarded by the ACA ingress when mTLS is enabled) and validates the certificate fingerprint matches Cloudflare's published origin-pull cert. If the ingress-level mTLS option is insufficient for your validation needs (e.g. you want to pin to a specific Cloudflare zone's cert), front the apps with a thin `envoy` / `nginx` sidecar container that does the validation before passing to the app.
 - **Origin allowlist by Cloudflare IP ranges** — ACA ingress can restrict source IPs. Set the allowlist to Cloudflare's published [IPv4](https://www.cloudflare.com/ips-v4) + [IPv6](https://www.cloudflare.com/ips-v6) ranges. Update via cron (CF publishes a versioned JSON; check monthly).
 - **Custom hostname only** — don't expose the `*.azurecontainerapps.io` FQDN publicly; use only `api.yourdomain.com`. Document that the platform FQDN is internal-only.
 
